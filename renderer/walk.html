@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Walk Jellyfish</title>
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+    <!-- MediaPipe Libraries -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+    <style>
+        body, html {
+            margin: 0; padding: 0; width: 100vw; height: 100vh;
+            overflow: hidden; font-family: 'Press Start 2P', cursive;
+            background: linear-gradient(135deg, #cce4ff 0%, #80c4ff 100%);
+        }
+
+        .container { position: relative; width: 100%; height: 100%; }
+        
+        video {
+            position: absolute; width: 100%; height: 100%; object-fit: cover;
+            transform: scaleX(-1); /* Mirror feed */
+            opacity: 0.8;
+        }
+        
+        canvas {
+            position: absolute; width: 100%; height: 100%; object-fit: cover;
+            transform: scaleX(-1); /* Mirror canvas so drawings align */
+            z-index: 10; pointer-events: none;
+        }
+
+        /* The Jellyfish SVG overlaying the video */
+        #walk-jelly {
+            position: absolute;
+            width: 150px;
+            height: 200px;
+            z-index: 20;
+            pointer-events: none;
+            /* Center bottom of jelly sits on finger */
+            transform: translate(-50%, -100%); 
+            transition: left 0.1s ease-out, top 0.1s ease-out;
+        }
+
+        #ui-overlay {
+            position: absolute; top: 20px; left: 20px; right: 20px;
+            display: flex; justify-content: space-between; align-items: flex-start;
+            z-index: 30; text-shadow: 2px 2px 0 rgba(255,255,255,0.8);
+            color: #004d80;
+        }
+
+        .stats-box {
+            background: rgba(255,255,255,0.7); padding: 15px; border-radius: 12px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1); border: 2px solid white;
+        }
+
+        .step-count { font-size: 24px; margin-bottom: 10px; }
+        .hint { font-size: 10px; color: #555; max-width: 200px; line-height: 1.5; }
+
+        button {
+            font-family: 'Press Start 2P', cursive; font-size: 14px;
+            padding: 15px 20px; border: 4px solid #004d80; border-radius: 8px;
+            background: #2ed573; color: white; cursor: pointer;
+            text-shadow: 2px 2px 0 rgba(0,0,0,0.3); box-shadow: 0 6px 0 #004d80;
+            transition: transform 0.1s;
+        }
+        button:active { transform: translateY(6px); box-shadow: none; }
+
+        .loading {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            font-size: 20px; color: white; text-shadow: 2px 2px 0 #004d80; z-index: 50;
+            text-align: center; line-height: 2;
+        }
+
+        .sparkle {
+            position: absolute; z-index: 25; font-size: 20px; pointer-events: none;
+            animation: floatUp 1s forwards;
+        }
+        @keyframes floatUp {
+            0% { transform: translateY(0) scale(1); opacity: 1; }
+            100% { transform: translateY(-50px) scale(0); opacity: 0; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <div id="loading-msg" class="loading">Warming up Camera &<br>AI Hand Tracking...<br><span style="font-size: 10px">(Please allow camera access)</span></div>
+        <video id="input-video" autoplay playsinline></video>
+        <canvas id="output-canvas"></canvas>
+
+        <!-- Reused Jellyfish SVG for walking -->
+        <svg id="walk-jelly" viewBox="0 0 200 300" style="display: none;">
+            <defs>
+                <radialGradient id="jellyGlowW" cx="50%" cy="50%" r="50%">
+                    <stop offset="0%" stop-color="rgba(200, 240, 255, 0.95)"/>
+                    <stop offset="70%" stop-color="rgba(100, 180, 255, 0.7)"/>
+                    <stop offset="100%" stop-color="rgba(50, 100, 255, 0.1)"/>
+                </radialGradient>
+            </defs>
+            <g class="jelly-body">
+                <path d="M 100 20 C 180 20 180 120 180 120 Q 180 140 150 140 Q 100 120 50 140 Q 20 140 20 120 C 20 120 20 20 100 20 Z" fill="url(#jellyGlowW)"/>
+                <g id="faces" transform="translate(75, 75)">
+                    <g class="face-group active">
+                        <rect x="0" y="0" width="8" height="8" fill="#003366"/>
+                        <rect x="36" y="0" width="8" height="8" fill="#003366"/>
+                        <rect x="18" y="15" width="8" height="4" fill="#003366"/>
+                    </g>
+                </g>
+            </g>
+            <g class="tentacles" transform="translate(0, -10)">
+                <path d="M 60 130 Q 30 200 50 280" stroke="rgba(150,220,255,0.7)" stroke-width="12" fill="none" stroke-linecap="round"/>
+                <path d="M 90 135 Q 100 220 85 290" stroke="rgba(150,220,255,0.8)" stroke-width="14" fill="none" stroke-linecap="round"/>
+                <path d="M 120 135 Q 110 210 130 285" stroke="rgba(150,220,255,0.8)" stroke-width="14" fill="none" stroke-linecap="round"/>
+                <path d="M 150 130 Q 180 200 160 280" stroke="rgba(150,220,255,0.7)" stroke-width="12" fill="none" stroke-linecap="round"/>
+            </g>
+        </svg>
+
+        <div id="ui-overlay" style="display: none;">
+            <div class="stats-box">
+                <div class="step-count">STEPS: <span id="step-ui">0</span></div>
+                <div class="hint">Move your index finger to walk the jellyfish!</div>
+            </div>
+            <button id="btn-done">DONE WALKING</button>
+        </div>
+    </div>
+
+    <script>
+        const videoElement = document.getElementById('input-video');
+        const canvasElement = document.getElementById('output-canvas');
+        const canvasCtx = canvasElement.getContext('2d');
+        const jellyEl = document.getElementById('walk-jelly');
+        const stepUI = document.getElementById('step-ui');
+        const loadingMsg = document.getElementById('loading-msg');
+        const uiOverlay = document.getElementById('ui-overlay');
+
+        let steps = 0;
+        let lastX = -1;
+        let lastY = -1;
+        let lastStepTime = 0;
+
+        function resizeCanvas() {
+            canvasElement.width = window.innerWidth;
+            canvasElement.height = window.innerHeight;
+        }
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        function spawnSparkle(x, y) {
+            const sparkle = document.createElement('div');
+            sparkle.className = 'sparkle';
+            sparkle.textContent = '✨';
+            sparkle.style.left = x + 'px';
+            sparkle.style.top = y + 'px';
+            document.body.appendChild(sparkle);
+            setTimeout(() => sparkle.remove(), 1000);
+        }
+
+        function onResults(results) {
+            if (loadingMsg.style.display !== 'none') {
+                loadingMsg.style.display = 'none';
+                uiOverlay.style.display = 'flex';
+                jellyEl.style.display = 'block';
+            }
+
+            canvasCtx.save();
+            canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+
+            if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+                const landmarks = results.multiHandLandmarks[0];
+                
+                // Draw skeleton
+                drawConnectors(canvasCtx, landmarks, HAND_CONNECTIONS, {color: '#ffffff', lineWidth: 3});
+                drawLandmarks(canvasCtx, landmarks, {color: '#004d80', lineWidth: 1, radius: 3});
+                
+                // Highlight index finger tip (landmark 8)
+                const indexTip = landmarks[8];
+                canvasCtx.beginPath();
+                canvasCtx.arc(indexTip.x * canvasElement.width, indexTip.y * canvasElement.height, 8, 0, 2 * Math.PI);
+                canvasCtx.fillStyle = '#2ed573';
+                canvasCtx.fill();
+
+                // Position Jellyfish
+                // NOTE: The video and canvas are visually mirrored using CSS scaleX(-1). 
+                // We must map MediaPipe coordinates (0 to 1) directly. The browser's CSS flip handles the visual.
+                // However, the Jelly DOM element sits *outside* the canvas/video, so we need to flip its X manually!
+                const screenX = (1 - indexTip.x) * window.innerWidth;
+                const screenY = indexTip.y * window.innerHeight;
+
+                jellyEl.style.left = screenX + 'px';
+                jellyEl.style.top = screenY + 'px';
+
+                // Step detection
+                const now = Date.now();
+                if (lastX !== -1 && now - lastStepTime > 200) {
+                    const dx = screenX - lastX;
+                    const dy = screenY - lastY;
+                    const dist = Math.sqrt(dx*dx + dy*dy);
+                    
+                    if (dist > 18) {
+                        steps++;
+                        stepUI.textContent = steps;
+                        lastStepTime = now;
+                        spawnSparkle(screenX, screenY);
+                    }
+                }
+                lastX = screenX;
+                lastY = screenY;
+            }
+            canvasCtx.restore();
+        }
+
+        const hands = new Hands({
+            locateFile: (file) => {
+                return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
+            }
+        });
+
+        hands.setOptions({
+            maxNumHands: 1,
+            modelComplexity: 1,
+            minDetectionConfidence: 0.5,
+            minTrackingConfidence: 0.5
+        });
+
+        hands.onResults(onResults);
+
+        const camera = new Camera(videoElement, {
+            onFrame: async () => {
+                await hands.send({image: videoElement});
+            },
+            width: 1280,
+            height: 720
+        });
+        camera.start();
+
+        document.getElementById('btn-done').addEventListener('click', () => {
+            const happyGain = Math.min(50, Math.floor(steps / 10)); // max 50 happy
+            const energyGain = Math.min(30, Math.floor(steps / 20)); // slightly regain energy by exercising
+            
+            camera.stop();
+            window.electronAPI.walkDone({
+                steps: steps,
+                happyGain: happyGain,
+                energyGain: energyGain
+            });
+        });
+    </script>
+</body>
+</html>

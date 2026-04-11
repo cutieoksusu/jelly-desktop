@@ -1,0 +1,681 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Jelly Desktop Pet</title>
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+    <style>
+        * { box-sizing: border-box; }
+        
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100vw;
+            height: 100vh;
+            overflow: hidden;
+            font-family: 'Press Start 2P', cursive;
+            /* Make entire background transparent & click-through */
+            background: transparent;
+            pointer-events: none; 
+        }
+
+        /* --- Environment (Click-through) --- */
+        .bubbles {
+            position: absolute; width: 100%; height: 100%;
+            pointer-events: none; z-index: 1;
+        }
+        .bubble {
+            position: absolute; bottom: -20px;
+            background: rgba(200, 240, 255, 0.4);
+            border-radius: 50%;
+            animation: rise linear infinite;
+        }
+        @keyframes rise {
+            0% { transform: translateY(0) scale(1); opacity: 0; }
+            10% { opacity: 1; }
+            100% { transform: translateY(-100vh) scale(1.5); opacity: 0; }
+        }
+
+        /* --- Jellyfish Container (Interactive) --- */
+        #jelly-container {
+            position: absolute;
+            width: 180px;
+            height: 250px;
+            pointer-events: auto; /* Makes it catch mouse events */
+            z-index: 50;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            transform: translate(100px, 100px); /* Initial position */
+            filter: grayscale(0%) brightness(100%);
+            transition: filter 1s ease;
+        }
+        
+        #jelly-container.hungry {
+            filter: grayscale(80%) brightness(70%);
+        }
+
+        /* Speech Bubble */
+        #speech-bubble {
+            position: absolute;
+            top: -40px;
+            background: white;
+            color: black;
+            padding: 10px;
+            border-radius: 8px;
+            font-size: 10px;
+            opacity: 0;
+            transition: opacity 0.3s;
+            pointer-events: none;
+            white-space: nowrap;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        #speech-bubble::after {
+            content: ''; position: absolute; bottom: -5px; left: 50%;
+            transform: translateX(-50%);
+            border-width: 5px 5px 0; border-style: solid;
+            border-color: white transparent transparent transparent;
+        }
+
+        /* SVG Jellyfish */
+        svg.jelly {
+            width: 100%; height: 100%;
+            overflow: visible;
+        }
+        
+        .jelly-body {
+            transform-origin: center 50px;
+            animation: pulse 3s infinite ease-in-out;
+        }
+        #jelly-container.sleeping .jelly-body { animation-duration: 6s; }
+
+        .tentacle {
+            transform-origin: top center;
+            animation: wiggle 2.5s infinite ease-in-out;
+        }
+        #jelly-container.hungry .tentacle { animation-play-state: paused; }
+        #jelly-container.sleeping .tentacle { animation-play-state: paused; }
+
+        .t1 { animation-delay: 0.0s; }
+        .t2 { animation-delay: 0.4s; }
+        .t3 { animation-delay: 0.8s; }
+        .t4 { animation-delay: 1.2s; }
+
+        @keyframes pulse {
+            0% { transform: scaleX(1) scaleY(1); }
+            50% { transform: scaleX(1.05) scaleY(0.95); }
+            100% { transform: scaleX(1) scaleY(1); }
+        }
+        @keyframes wiggle {
+            0% { transform: rotate(-8deg); }
+            50% { transform: rotate(8deg); }
+            100% { transform: rotate(-8deg); }
+        }
+
+        /* Faces */
+        .face-group { display: none; }
+        .face-group.active { display: block; }
+
+        /* --- UI Panel (Interactive) --- */
+        #ui-panel {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            width: 320px;
+            background: rgba(255, 255, 255, 0.15);
+            backdrop-filter: blur(12px);
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-radius: 12px;
+            padding: 15px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            pointer-events: auto; /* Catch mouse events */
+            z-index: 100;
+            color: #333;
+            text-shadow: 1px 1px 0 rgba(255,255,255,0.5);
+        }
+
+        .panel-header {
+            font-size: 14px; margin-bottom: 15px; text-align: center; color: #004d80;
+            cursor: pointer; transition: transform 0.2s;
+        }
+        .panel-header:hover { transform: scale(1.05); }
+        
+        #jelly-name-input {
+            display: none; width: 100%; font-family: 'Press Start 2P', cursive;
+            font-size: 12px; text-align: center; margin-bottom: 15px;
+            background: rgba(255,255,255,0.8); border: 2px solid #004d80;
+            border-radius: 6px; padding: 5px; outline: none; color: #004d80;
+        }
+
+        /* Stats */
+        .stat-row { display: flex; align-items: center; margin-bottom: 8px; font-size: 10px; }
+        .stat-label { width: 70px; }
+        .stat-bar-bg {
+            flex-grow: 1; height: 12px; background: rgba(0,0,0,0.2); border-radius: 6px; overflow: hidden; position: relative;
+        }
+        .stat-bar-fill { height: 100%; transition: width 0.5s ease; }
+        #bar-hunger { background: #ff4757; }
+        #bar-happy { background: #2ed573; }
+        #bar-energy { background: #ffa502; }
+
+        /* Food Tray */
+        .food-tray {
+            display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 15px 0;
+            background: rgba(0,0,0,0.05); padding: 10px; border-radius: 8px;
+        }
+        .food-item {
+            text-align: center; font-size: 24px; cursor: grab; user-select: none;
+            transition: transform 0.2s;
+        }
+        .food-item:hover { transform: scale(1.2); }
+        .food-item:active { cursor: grabbing; }
+
+        /* Buttons */
+        .btn-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+        button {
+            font-family: 'Press Start 2P', cursive;
+            font-size: 10px; padding: 10px; border: none; border-radius: 6px;
+            background: rgba(255,255,255,0.6); cursor: pointer; color: #004d80;
+            transition: background 0.2s; box-shadow: 0 2px 0 rgba(0,0,0,0.1);
+        }
+        button:hover { background: rgba(255,255,255,0.9); }
+        button:active { transform: translateY(2px); box-shadow: none; }
+        #btn-quit { grid-column: span 2; background: rgba(255, 100, 100, 0.5); color: white; margin-top: 5px; }
+        #btn-quit:hover { background: rgba(255, 100, 100, 0.8); }
+
+        /* Ghost element for dragging */
+        #drag-ghost {
+            position: absolute; font-size: 30px; pointer-events: none; z-index: 999;
+            display: none; text-shadow: 0 0 10px transparent;
+        }
+        #drag-ghost.glow-green { text-shadow: 0 0 15px #2ed573; }
+
+        /* Particles */
+        .particle {
+            position: absolute; pointer-events: none; font-size: 16px;
+            animation: pop 1s forwards; z-index: 90;
+        }
+        @keyframes pop {
+            0% { transform: translate(0, 0) scale(1); opacity: 1; }
+            100% { transform: translate(var(--dx), var(--dy)) scale(0); opacity: 0; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="bubbles" id="bubbles-layer"></div>
+
+    <div id="jelly-container">
+        <div id="speech-bubble">안녕!</div>
+        <svg class="jelly" viewBox="0 0 200 300">
+            <defs>
+                <radialGradient id="jellyGlow" cx="50%" cy="50%" r="50%">
+                    <stop offset="0%" stop-color="rgba(200, 240, 255, 0.95)"/>
+                    <stop offset="70%" stop-color="rgba(100, 180, 255, 0.7)"/>
+                    <stop offset="100%" stop-color="rgba(50, 100, 255, 0.1)"/>
+                </radialGradient>
+            </defs>
+            
+            <g class="jelly-body">
+                <!-- Cap -->
+                <path d="M 100 20 C 180 20 180 120 180 120 Q 180 140 150 140 Q 100 120 50 140 Q 20 140 20 120 C 20 120 20 20 100 20 Z" fill="url(#jellyGlow)" filter="drop-shadow(0 0 15px rgba(100,200,255,0.8))"/>
+                
+                <!-- Faces (Pixel Art) -->
+                <g id="faces" transform="translate(75, 75)">
+                    <!-- Happy -->
+                    <g id="face-happy" class="face-group active">
+                        <rect x="0" y="4" width="8" height="8" fill="#003366"/>
+                        <rect x="36" y="4" width="8" height="8" fill="#003366"/>
+                        <rect x="18" y="16" width="8" height="4" fill="#003366"/>
+                        <!-- 귀여운 핑크색 볼터치 추가 -->
+                        <rect x="-6" y="12" width="10" height="4" fill="#ff9999"/>
+                        <rect x="40" y="12" width="10" height="4" fill="#ff9999"/>
+                    </g>
+                    <!-- Sad -->
+                    <g id="face-sad" class="face-group">
+                        <rect x="0" y="4" width="10" height="4" fill="#003366"/>
+                        <rect x="34" y="4" width="10" height="4" fill="#003366"/>
+                        <!-- 파란색 눈물 추가 -->
+                        <rect x="2" y="10" width="4" height="8" fill="#66ccff"/>
+                        <rect x="38" y="10" width="4" height="8" fill="#66ccff"/>
+                        <rect x="16" y="15" width="12" height="4" fill="#003366"/>
+                        <rect x="16" y="19" width="4" height="4" fill="#003366"/>
+                        <rect x="24" y="19" width="4" height="4" fill="#003366"/>
+                    </g>
+                    <!-- Eating -->
+                    <g id="face-eating" class="face-group">
+                        <rect x="0" y="0" width="8" height="8" fill="#003366"/>
+                        <rect x="36" y="0" width="8" height="8" fill="#003366"/>
+                        <rect x="18" y="12" width="10" height="10" fill="#003366"/>
+                    </g>
+                    <!-- Love -->
+                    <g id="face-love" class="face-group">
+                        <rect x="-2" y="-2" width="12" height="12" fill="#ff4757"/>
+                        <rect x="34" y="-2" width="12" height="12" fill="#ff4757"/>
+                        <rect x="18" y="15" width="8" height="4" fill="#003366"/>
+                    </g>
+                    <!-- Sleep -->
+                    <g id="face-sleep" class="face-group">
+                        <rect x="0" y="4" width="10" height="4" fill="#003366"/>
+                        <rect x="34" y="4" width="10" height="4" fill="#003366"/>
+                        <text x="35" y="-10" font-size="12" fill="#003366" font-family="Arial">z</text>
+                        <text x="45" y="-25" font-size="16" fill="#003366" font-family="Arial">Z</text>
+                    </g>
+                </g>
+            </g>
+
+            <!-- Tentacles -->
+            <g class="tentacles" transform="translate(0, -10)">
+                <path class="tentacle t1" d="M 60 130 Q 30 200 50 280" stroke="rgba(150,220,255,0.7)" stroke-width="12" fill="none" stroke-linecap="round"/>
+                <path class="tentacle t2" d="M 90 135 Q 100 220 85 290" stroke="rgba(150,220,255,0.8)" stroke-width="14" fill="none" stroke-linecap="round"/>
+                <path class="tentacle t3" d="M 120 135 Q 110 210 130 285" stroke="rgba(150,220,255,0.8)" stroke-width="14" fill="none" stroke-linecap="round"/>
+                <path class="tentacle t4" d="M 150 130 Q 180 200 160 280" stroke="rgba(150,220,255,0.7)" stroke-width="12" fill="none" stroke-linecap="round"/>
+            </g>
+        </svg>
+    </div>
+
+    <div id="ui-panel">
+        <div class="panel-header" id="jelly-name-header" title="클릭해서 이름 바꾸기">Jelly (해파리)</div>
+        <input type="text" id="jelly-name-input" maxlength="10" placeholder="이름 입력">
+        
+        <div class="stats">
+            <div class="stat-row">
+                <div class="stat-label">포만감</div>
+                <div class="stat-bar-bg"><div id="bar-hunger" class="stat-bar-fill" style="width: 100%;"></div></div>
+            </div>
+            <div class="stat-row">
+                <div class="stat-label">행복도</div>
+                <div class="stat-bar-bg"><div id="bar-happy" class="stat-bar-fill" style="width: 100%;"></div></div>
+            </div>
+            <div class="stat-row">
+                <div class="stat-label">에너지</div>
+                <div class="stat-bar-bg"><div id="bar-energy" class="stat-bar-fill" style="width: 100%;"></div></div>
+            </div>
+        </div>
+
+        <div class="food-tray" id="food-tray">
+            <div class="food-item" data-food="plankton">🦠</div>
+            <div class="food-item" data-food="shrimp">🦐</div>
+            <div class="food-item" data-food="fish">🐟</div>
+            <div class="food-item" data-food="seaweed">🌿</div>
+            <div class="food-item" data-food="krill">🦞</div>
+            <div class="food-item" data-food="special">⭐</div>
+        </div>
+
+        <div class="btn-grid">
+            <button id="btn-walk">산책</button>
+            <button id="btn-pet">쓰다듬기</button>
+            <button id="btn-play">놀기</button>
+            <button id="btn-sleep">잠자기</button>
+            <button id="btn-quit">앱 종료</button>
+        </div>
+    </div>
+
+    <div id="drag-ghost"></div>
+
+    <script>
+        // 웹 브라우저 미리보기 환경을 위한 모의(Mock) API 설정
+        if (!window.electronAPI) {
+            console.warn("electronAPI를 찾을 수 없습니다. 웹 미리보기 모드로 실행합니다.");
+            window.electronAPI = {
+                setIgnoreMouse: (ignore) => {},
+                openWalk: () => alert('웹 브라우저에서는 산책 창을 열 수 없습니다. 데스크톱 앱으로 실행해주세요.'),
+                walkDone: (stats) => {},
+                onWalkResult: (callback) => {},
+                quitApp: () => alert('웹 브라우저에서는 앱을 종료할 수 없습니다.')
+            };
+        }
+
+        // --- State Management ---
+        const State = {
+            name: localStorage.getItem('jelly_name') || 'Jelly',
+            lastFed: parseInt(localStorage.getItem('jelly_lastFed')) || Date.now(),
+            hunger: parseFloat(localStorage.getItem('jelly_hunger')) || 100,
+            happy: parseFloat(localStorage.getItem('jelly_happy')) || 100,
+            energy: parseFloat(localStorage.getItem('jelly_energy')) || 100,
+            isBusy: false,
+            isSleeping: false,
+            save() {
+                localStorage.setItem('jelly_name', this.name);
+                localStorage.setItem('jelly_lastFed', this.lastFed);
+                localStorage.setItem('jelly_hunger', this.hunger);
+                localStorage.setItem('jelly_happy', this.happy);
+                localStorage.setItem('jelly_energy', this.energy);
+                updateUI();
+            }
+        };
+
+        const TWENTY_FOUR_HOURS = 24 * 60 * 60 * 1000;
+
+        // --- UI Elements ---
+        const jellyContainer = document.getElementById('jelly-container');
+        const uiPanel = document.getElementById('ui-panel');
+        const speechBubble = document.getElementById('speech-bubble');
+        const dragGhost = document.getElementById('drag-ghost');
+        const faces = document.querySelectorAll('.face-group');
+
+        const nameHeader = document.getElementById('jelly-name-header');
+        const nameInput = document.getElementById('jelly-name-input');
+
+        // --- Naming Logic ---
+        nameHeader.textContent = State.name + ' (해파리)';
+
+        nameHeader.addEventListener('click', () => {
+            nameHeader.style.display = 'none';
+            nameInput.style.display = 'block';
+            nameInput.value = State.name;
+            nameInput.focus();
+            window.electronAPI.setIgnoreMouse(false); // 입력 중 마우스 인식 활성화
+        });
+
+        const saveName = () => {
+            if (nameInput.value.trim()) {
+                State.name = nameInput.value.trim();
+                State.save();
+            }
+            nameInput.style.display = 'none';
+            nameHeader.style.display = 'block';
+            nameHeader.textContent = State.name + ' (해파리)';
+        };
+
+        nameInput.addEventListener('blur', saveName);
+        nameInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') saveName();
+        });
+
+        // --- Interaction Tracking ---
+        let interactionsEnabled = true;
+
+        // Manage click-through. Enable events when hovering interactive parts
+        function setupMouseIgnore() {
+            const makeSolid = () => window.electronAPI.setIgnoreMouse(false);
+            const makeTransparent = () => {
+                if (!isDragging) window.electronAPI.setIgnoreMouse(true);
+            };
+
+            jellyContainer.addEventListener('mouseenter', makeSolid);
+            jellyContainer.addEventListener('mouseleave', makeTransparent);
+            uiPanel.addEventListener('mouseenter', makeSolid);
+            uiPanel.addEventListener('mouseleave', makeTransparent);
+        }
+        setupMouseIgnore();
+
+        function setFace(faceId) {
+            faces.forEach(f => f.classList.remove('active'));
+            document.getElementById(`face-${faceId}`).classList.add('active');
+        }
+
+        function say(text, duration = 3000) {
+            speechBubble.textContent = text;
+            speechBubble.style.opacity = 1;
+            setTimeout(() => { speechBubble.style.opacity = 0; }, duration);
+        }
+
+        function updateUI() {
+            document.getElementById('bar-hunger').style.width = `${Math.max(0, State.hunger)}%`;
+            document.getElementById('bar-happy').style.width = `${Math.max(0, State.happy)}%`;
+            document.getElementById('bar-energy').style.width = `${Math.max(0, State.energy)}%`;
+
+            // Style updates based on stats
+            if (State.hunger < 30) jellyContainer.classList.add('hungry');
+            else jellyContainer.classList.remove('hungry');
+            
+            if (State.isSleeping) {
+                jellyContainer.classList.add('sleeping');
+                setFace('sleep');
+            } else if (!State.isBusy) {
+                jellyContainer.classList.remove('sleeping');
+                if (State.hunger < 30) setFace('sad');
+                else if (State.happy > 70) setFace('happy');
+                else setFace('happy'); // Default
+            }
+        }
+
+        function decayStats() {
+            if (State.isSleeping) {
+                State.energy = Math.min(100, State.energy + 5);
+                State.hunger -= 0.5;
+            } else {
+                const now = Date.now();
+                const timePassed = now - State.lastFed;
+                
+                // Hunger decays 100 to 0 in exactly 24 hours
+                State.hunger = Math.max(0, 100 - (timePassed / TWENTY_FOUR_HOURS) * 100);
+                
+                // Slower decays for other stats
+                State.happy = Math.max(0, State.happy - 0.5);
+                State.energy = Math.max(0, State.energy - 0.2);
+            }
+            State.save();
+        }
+        setInterval(decayStats, 60000); // Check every minute
+        decayStats(); // Initial check
+
+        // --- Roaming Logic ---
+        function roam() {
+            if (State.isBusy || State.isSleeping) {
+                setTimeout(roam, 2000);
+                return;
+            }
+
+            // Screen bounds
+            const maxX = window.innerWidth - 200;
+            const maxY = window.innerHeight - 300;
+            
+            let targetX = Math.random() * maxX;
+            let targetY = Math.random() * maxY;
+
+            // Avoid UI panel (bottom right)
+            if (targetX > window.innerWidth - 400 && targetY > window.innerHeight - 350) {
+                targetX -= 400; 
+                targetY -= 350;
+            }
+
+            // Speed based on energy
+            let duration = 3000 + ((100 - State.energy) * 60); // 3s to 9s
+            
+            jellyContainer.style.transition = `transform ${duration}ms ease-in-out`;
+            jellyContainer.style.transform = `translate(${targetX}px, ${targetY}px)`;
+
+            setTimeout(roam, duration + 1000 + Math.random() * 2000);
+        }
+        setTimeout(roam, 1000);
+
+        // --- Drag and Drop Feeding ---
+        let isDragging = false;
+        let currentFood = null;
+
+        document.querySelectorAll('.food-item').forEach(item => {
+            item.addEventListener('mousedown', (e) => {
+                if (State.isSleeping || State.isBusy) return;
+                isDragging = true;
+                currentFood = e.target.textContent;
+                
+                window.electronAPI.setIgnoreMouse(false); // Force mouse tracking
+                
+                dragGhost.textContent = currentFood;
+                dragGhost.style.display = 'block';
+                moveGhost(e.clientX, e.clientY);
+                
+                e.preventDefault(); // Prevent text selection
+            });
+        });
+
+        window.addEventListener('mousemove', (e) => {
+            if (!isDragging) return;
+            moveGhost(e.clientX, e.clientY);
+            
+            // Collision detection with Jellyfish
+            const rect = jellyContainer.getBoundingClientRect();
+            if (e.clientX > rect.left && e.clientX < rect.right &&
+                e.clientY > rect.top && e.clientY < rect.bottom) {
+                dragGhost.classList.add('glow-green');
+                if(!State.isBusy) setFace('eating');
+            } else {
+                dragGhost.classList.remove('glow-green');
+                if(!State.isBusy) updateUI(); // Reset face
+            }
+        });
+
+        window.addEventListener('mouseup', (e) => {
+            if (!isDragging) return;
+            isDragging = false;
+            dragGhost.style.display = 'none';
+            window.electronAPI.setIgnoreMouse(true); // Return to normal
+            
+            const rect = jellyContainer.getBoundingClientRect();
+            if (e.clientX > rect.left && e.clientX < rect.right &&
+                e.clientY > rect.top && e.clientY < rect.bottom) {
+                feedJelly();
+            } else {
+                updateUI();
+            }
+        });
+
+        function moveGhost(x, y) {
+            dragGhost.style.left = (x - 15) + 'px';
+            dragGhost.style.top = (y - 15) + 'px';
+        }
+
+        function feedJelly() {
+            State.isBusy = true;
+            State.lastFed = Date.now();
+            State.hunger = 100;
+            State.happy = Math.min(100, State.happy + 10);
+            State.save();
+            
+            setFace('eating');
+            say("냠냠!", 2000);
+            spawnParticles(jellyContainer.getBoundingClientRect(), currentFood, 10);
+
+            setTimeout(() => {
+                State.isBusy = false;
+                updateUI();
+            }, 3000);
+        }
+
+        // --- Actions ---
+        document.getElementById('btn-walk').addEventListener('click', () => {
+            if(State.isSleeping) return;
+            say("신난다! 산책 시간!", 3000);
+            
+            // 산책 창이 열릴 때 바탕화면의 해파리를 일시적으로 숨깁니다. (1마리만 있도록)
+            jellyContainer.style.display = 'none';
+            
+            window.electronAPI.openWalk();
+        });
+
+        document.getElementById('btn-pet').addEventListener('click', () => {
+            if(State.isSleeping) return;
+            State.isBusy = true;
+            State.happy = Math.min(100, State.happy + 15);
+            State.save();
+            
+            setFace('love');
+            say("♥", 2000);
+            spawnParticles(jellyContainer.getBoundingClientRect(), '💖', 5);
+            
+            // Jump animation
+            const currTransform = jellyContainer.style.transform;
+            jellyContainer.style.transition = 'transform 0.3s ease-out';
+            jellyContainer.style.transform = currTransform + ' translateY(-30px)';
+            setTimeout(() => {
+                jellyContainer.style.transform = currTransform;
+                setTimeout(() => { State.isBusy = false; updateUI(); }, 300);
+            }, 300);
+        });
+
+        document.getElementById('btn-play').addEventListener('click', () => {
+            if(State.isSleeping || State.energy < 20) {
+                say("너무 피곤해...", 2000);
+                return;
+            }
+            State.isBusy = true;
+            State.happy = Math.min(100, State.happy + 20);
+            State.energy = Math.max(0, State.energy - 15);
+            State.save();
+            
+            setFace('happy');
+            say("우아앙!", 2000);
+            
+            const currTransform = jellyContainer.style.transform;
+            jellyContainer.style.transition = 'transform 1s ease-in-out';
+            jellyContainer.style.transform = currTransform + ' rotate(360deg)';
+            
+            setTimeout(() => {
+                jellyContainer.style.transition = 'none'; // reset rotation without reverse animate
+                jellyContainer.style.transform = currTransform;
+                State.isBusy = false;
+                updateUI();
+            }, 1000);
+        });
+
+        document.getElementById('btn-sleep').addEventListener('click', () => {
+            State.isSleeping = !State.isSleeping;
+            if (State.isSleeping) {
+                say("쿨쿨...", 3000);
+                State.isBusy = false; 
+            } else {
+                say("좋은 아침!", 2000);
+            }
+            updateUI();
+        });
+
+        document.getElementById('btn-quit').addEventListener('click', () => {
+            window.electronAPI.quitApp();
+        });
+
+        // --- Walk Mode Return ---
+        window.electronAPI.onWalkResult((result) => {
+            // 산책이 끝나고 돌아오면 바탕화면 해파리를 다시 보이게 합니다.
+            jellyContainer.style.display = 'flex';
+            
+            State.happy = Math.min(100, State.happy + result.happyGain);
+            State.energy = Math.min(100, State.energy + result.energyGain);
+            State.save();
+            say(`${result.steps}걸음 걸었다!`, 4000);
+            setFace('love');
+            setTimeout(() => updateUI(), 4000);
+        });
+
+        // --- Utilities ---
+        function spawnParticles(rect, char, count) {
+            const centerX = rect.left + rect.width / 2;
+            const centerY = rect.top + rect.height / 2;
+
+            for (let i = 0; i < count; i++) {
+                const el = document.createElement('div');
+                el.className = 'particle';
+                el.textContent = char;
+                el.style.left = centerX + 'px';
+                el.style.top = centerY + 'px';
+                
+                // Random vector
+                const angle = Math.random() * Math.PI * 2;
+                const distance = 50 + Math.random() * 100;
+                el.style.setProperty('--dx', `${Math.cos(angle) * distance}px`);
+                el.style.setProperty('--dy', `${Math.sin(angle) * distance}px`);
+                
+                document.body.appendChild(el);
+                setTimeout(() => el.remove(), 1000);
+            }
+        }
+
+        // Background Bubbles Spawner
+        const bubblesLayer = document.getElementById('bubbles-layer');
+        setInterval(() => {
+            const bubble = document.createElement('div');
+            bubble.className = 'bubble';
+            const size = 5 + Math.random() * 15;
+            bubble.style.width = size + 'px';
+            bubble.style.height = size + 'px';
+            bubble.style.left = Math.random() * 100 + 'vw';
+            bubble.style.animationDuration = (5 + Math.random() * 10) + 's';
+            bubblesLayer.appendChild(bubble);
+            setTimeout(() => bubble.remove(), 15000);
+        }, 500);
+
+    </script>
+</body>
+</html>
