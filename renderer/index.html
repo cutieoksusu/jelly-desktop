@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Jelly Desktop Pet</title>
-    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Jua&display=swap" rel="stylesheet">
     <style>
         * { box-sizing: border-box; }
         
@@ -14,8 +14,7 @@
             width: 100vw;
             height: 100vh;
             overflow: hidden;
-            font-family: 'Press Start 2P', cursive;
-            /* Make entire background transparent & click-through */
+            font-family: 'Jua', sans-serif; /* 여기를 Jua로 변경! */
             background: transparent;
             pointer-events: none; 
         }
@@ -62,9 +61,9 @@
             top: -40px;
             background: white;
             color: black;
-            padding: 10px;
-            border-radius: 8px;
-            font-size: 10px;
+            padding: 10px 15px; /* 패딩을 살짝 넓힘 */
+            border-radius: 12px; /* 좀 더 둥글게 */
+            font-size: 18px; /* 글씨 큼직하게 (원래 10px) */
             opacity: 0;
             transition: opacity 0.3s;
             pointer-events: none;
@@ -136,20 +135,21 @@
         }
 
         .panel-header {
-            font-size: 14px; margin-bottom: 15px; text-align: center; color: #004d80;
+            font-size: 20px; /* 원래 14px */
+            margin-bottom: 15px; text-align: center; color: #004d80;
             cursor: pointer; transition: transform 0.2s;
         }
         .panel-header:hover { transform: scale(1.05); }
         
         #jelly-name-input {
-            display: none; width: 100%; font-family: 'Press Start 2P', cursive;
-            font-size: 12px; text-align: center; margin-bottom: 15px;
+            display: none; width: 100%; font-family: 'Jua', sans-serif;
+            font-size: 18px; text-align: center; margin-bottom: 15px;
             background: rgba(255,255,255,0.8); border: 2px solid #004d80;
             border-radius: 6px; padding: 5px; outline: none; color: #004d80;
         }
 
         /* Stats */
-        .stat-row { display: flex; align-items: center; margin-bottom: 8px; font-size: 10px; }
+        .stat-row { display: flex; align-items: center; margin-bottom: 10px; font-size: 14px; /* 원래 10px */ }
         .stat-label { width: 70px; }
         .stat-bar-bg {
             flex-grow: 1; height: 12px; background: rgba(0,0,0,0.2); border-radius: 6px; overflow: hidden; position: relative;
@@ -174,8 +174,8 @@
         /* Buttons */
         .btn-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
         button {
-            font-family: 'Press Start 2P', cursive;
-            font-size: 10px; padding: 10px; border: none; border-radius: 6px;
+            font-family: 'Jua', sans-serif;
+            font-size: 16px; padding: 10px; border: none; border-radius: 8px;
             background: rgba(255,255,255,0.6); cursor: pointer; color: #004d80;
             transition: background 0.2s; box-shadow: 0 2px 0 rgba(0,0,0,0.1);
         }
@@ -543,6 +543,9 @@
             State.lastFed = Date.now();
             State.hunger = 100;
             State.happy = Math.min(100, State.happy + 10);
+           // ⭐ 별을 먹으면 에너지 20 회복하는 코드 한 줄 추가!
+            if (currentFood === '⭐') State.energy = Math.min(100, State.energy + 20);
+
             State.save();
             
             setFace('eating');
